@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>QASec Lab — Hackeando e blindando APIs</title>
+<meta name="description" content="Laboratório de segurança em APIs que roda inteiro no navegador: explore e corrija BOLA e BOPLA (OWASP API Top 10). Minicurso QASec, E-info 2026.">
+<meta name="author" content="Breno Luna">
+<meta property="og:title" content="QASec Lab — Hackeando e blindando APIs">
+<meta property="og:description" content="Cliente HTTP estilo Postman + API vulnerável simulada no navegador. Desafios de BOLA e BOPLA, flags e modo seguro.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://brenoluna861.github.io/qasec-lab/">
+<meta name="theme-color" content="#060820">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 4 8 13v17c0 15 10 26 24 30 14-4 24-15 24-30V13z' fill='%23a66bff'/%3E%3Cpath d='m22 32 7 7 14-14' stroke='%23060820' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;600;800&family=Fira+Code:wght@400;600&display=swap">
+<style>
+/* Layout: cliente HTTP de uma tela — missões à esquerda, requisição e resposta à direita; a API vulnerável roda dentro da página. */
+:root{
+  --bg:#060820; --panel:#0e1238; --panel2:#151a4a; --line:#262c66; --fg:#ecebff; --muted:#9a98c4;
+  --violet:#a66bff; --blue:#6ea0ff; --green:#4ade80; --red:#f87171; --amber:#fbbf24; --code:#04061a;
+  --sans:"Fira Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"Fira Code",ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+a{color:var(--blue)}
+.wrap{max-width:1200px;margin:0 auto;padding-block:16px 40px;display:flex;flex-direction:column;gap:14px}
+header.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-weight:800;font-size:1.5rem;letter-spacing:-.02em}.logo b{color:var(--violet)}
+.top .sub{color:var(--muted);font-size:.85rem}
+.top .right{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.flags{display:flex;gap:6px}
+.flag{font-family:var(--mono);font-size:.75rem;padding:4px 9px;border-radius:999px;border:1px dashed var(--line);color:var(--muted)}
+.flag.got{border:1px solid var(--green);color:var(--green);background:#0f2a1f}
+.mode{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+.mode .pill{font-family:var(--mono);font-weight:600;font-size:.75rem;padding:2px 8px;border-radius:4px}
+.pill.vul{background:#3a1420;color:var(--red)}.pill.seg{background:#0f2a1f;color:var(--green)}
+.layout{display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start}
+.layout > *{min-width:0}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+h2{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--violet);margin:0;font-weight:600}
+.mission h3{margin:0;font-size:1rem}
+.mission ol{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:5px;font-size:.88rem;color:#d6d4f5}
+.mission code,.hint code,.footer code{font-family:var(--mono);font-size:.82em;background:var(--panel2);padding:1px 5px;border-radius:4px}
+.tabsm{display:flex;gap:4px}
+.tabsm button{flex:1;font:600 .82rem var(--sans);background:none;border:1px solid var(--line);color:var(--muted);padding:6px;border-radius:6px;cursor:pointer}
+.tabsm button[aria-pressed="true"]{background:var(--violet);border-color:var(--violet);color:#120a2a}
+.coll{display:flex;flex-direction:column;gap:4px}
+.coll .grp{font-size:.72rem;color:var(--muted);margin-top:6px;letter-spacing:.06em;text-transform:uppercase}
+.coll button{display:flex;gap:8px;align-items:center;text-align:left;font:400 .85rem var(--sans);background:none;border:0;color:var(--fg);padding:6px 8px;border-radius:6px;cursor:pointer}
+.coll button:hover{background:var(--panel2)}
+.m{font-family:var(--mono);font-weight:600;font-size:.7rem;min-width:44px}
+.m.GET{color:var(--green)}.m.POST{color:var(--amber)}.m.PATCH{color:var(--violet)}.m.PUT{color:var(--blue)}.m.DELETE{color:var(--red)}
+.reqline{display:flex;gap:8px;flex-wrap:wrap}
+select,input,textarea{font:400 .92rem var(--mono);background:var(--code);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:10px}
+#method{font-weight:600;width:auto}
+#url{flex:1;min-width:180px}
+.send{font:800 .95rem var(--sans);background:var(--violet);color:#120a2a;border:0;border-radius:8px;padding:10px 22px;cursor:pointer}
+.send:active{transform:translateY(1px)}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.rtabs{display:flex;gap:2px;border-bottom:1px solid var(--line)}
+.rtabs button{font:600 .85rem var(--sans);background:none;border:0;color:var(--muted);padding:8px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.rtabs button[aria-selected="true"]{color:var(--fg);border-color:var(--violet)}
+.rtabs .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-left:6px;vertical-align:2px}
+textarea{width:100%;min-height:130px;resize:vertical;line-height:1.5}
+.authrow{display:flex;flex-direction:column;gap:6px}
+.authrow label{font-size:.78rem;color:var(--muted);font-weight:600}
+.authrow input{width:100%}
+.resp-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.status{font-family:var(--mono);font-weight:600;padding:3px 10px;border-radius:6px;font-size:.9rem}
+.s2{background:#0f2a1f;color:var(--green)}.s4{background:#3a2a0c;color:var(--amber)}.s5{background:#3a1420;color:var(--red)}
+.meaning{font-size:.85rem;color:var(--muted)}
+.meaning code{font-family:var(--mono)}
+pre{margin:0;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;font:400 .85rem/1.55 var(--mono);white-space:pre}
+pre .k{color:#c4a5ff}.str{color:#7ee2b8}.num{color:#fbbf24}.kw{color:#6ea0ff}
+.flaghit{color:var(--green);font-weight:600}
+.empty{color:var(--muted);font-size:.9rem}
+.codebox{border-left:3px solid var(--violet);padding-left:10px;display:flex;flex-direction:column;gap:6px}
+.codebox .lbl{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hist{display:flex;flex-direction:column;gap:2px;max-height:200px;overflow:auto}
+.hist button{display:flex;gap:8px;align-items:center;font:400 .8rem var(--mono);background:none;border:0;color:var(--fg);padding:4px 6px;border-radius:4px;cursor:pointer;text-align:left}
+.hist button:hover{background:var(--panel2)}
+.hist .st{margin-left:auto;font-size:.75rem}
+.btn{font:600 .82rem var(--sans);background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 10px;cursor:pointer}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--green);color:#06210f;font-weight:800;padding:10px 18px;border-radius:999px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:20}
+.toast.on{opacity:1}
+.inst{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.footer{color:var(--muted);font-size:.8rem;line-height:1.6;margin:0}
+.nojs{max-width:640px;margin:40px auto;padding:16px;border:1px solid var(--red);border-radius:10px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<noscript><p class="nojs">O QASec Lab precisa de JavaScript ligado para funcionar.</p></noscript>
+
+<div class="wrap">
+  <header class="top">
+    <div class="logo">QA<b>Sec</b> Lab</div>
+    <div class="sub">E-info 2026 · roda inteiro no navegador, sem instalar nada</div>
+    <div class="right">
+      <div class="flags" aria-label="Flags encontradas"><span class="flag" id="f-BOLA">BOLA</span><span class="flag" id="f-BOPLA">BOPLA</span><span class="flag" id="f-ADMIN">ADMIN</span></div>
+      <div class="mode">API: <span class="pill vul" id="modepill">VULNERÁVEL</span></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="card">
+      <h2>Missões</h2>
+      <div class="tabsm"><button id="tm1" aria-pressed="true">Desafio 01</button><button id="tm2" aria-pressed="false">Desafio 02</button></div>
+      <div class="mission" id="mis1">
+        <h3>BOLA: vazamento de dados</h3>
+        <ol>
+          <li>Faça <b>Login</b> e clique em <b>Usar este token</b>.</li>
+          <li>Descubra seu ID com <code>GET /api/me</code>.</li>
+          <li>Veja suas faturas: <code>GET /api/faturas</code>.</li>
+          <li><b>Ataque:</b> em <code>GET /api/faturas/&lt;id&gt;</code>, troque o número e tente ler a fatura de outra pessoa.</li>
+        </ol>
+      </div>
+      <div class="mission" id="mis2" hidden>
+        <h3>BOPLA: virar administrador</h3>
+        <ol>
+          <li>Use <code>PATCH /api/users/me</code>.</li>
+          <li>Na aba <b>Body</b>, faça uma alteração legítima: <code>{"nome": "Seu nome"}</code>.</li>
+          <li><b>Ataque:</b> acrescente um campo que o site nunca manda, como <code>"role": "administrator"</code>.</li>
+          <li>Confirme com <code>GET /api/me</code>. Depois tente achar a rota escondida de admin.</li>
+        </ol>
+      </div>
+
+      <h2 style="margin-top:6px">Coleção</h2>
+      <div class="coll" id="coll"></div>
+
+      <h2 style="margin-top:6px">Histórico</h2>
+      <div class="hist" id="hist"><span class="empty">Nenhuma requisição ainda.</span></div>
+    </aside>
+
+    <main style="display:flex;flex-direction:column;gap:14px;min-width:0">
+      <section class="card">
+        <div class="reqline">
+          <select id="method" aria-label="Método"><option>GET</option><option selected>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select>
+          <input id="url" aria-label="URL" value="/api/login" spellcheck="false" autocomplete="off">
+          <button class="send" id="send">Send</button>
+        </div>
+        <div class="rtabs" role="tablist">
+          <button id="rt-auth" role="tab" aria-selected="false">Authorization<span class="dot" id="authdot" hidden></span></button>
+          <button id="rt-body" role="tab" aria-selected="true">Body</button>
+          <button id="rt-head" role="tab" aria-selected="false">Headers</button>
+        </div>
+        <div id="p-auth" class="authrow" hidden>
+          <label for="token">Bearer Token</label>
+          <input id="token" placeholder="cole aqui o token do login" spellcheck="false" autocomplete="off">
+          <span class="meaning">Vai no header como <code>Authorization: Bearer &lt;token&gt;</code>. Vazio = sem crachá.</span>
+        </div>
+        <div id="p-body">
+          <textarea id="body" spellcheck="false" aria-label="Body em JSON">{
+  "email": "aluno01@qasec.lab",
+  "senha": "qasec123"
+}</textarea>
+          <span class="meaning">raw › JSON. Lembre: JSON não aceita comentário <code>//</code>.</span>
+        </div>
+        <div id="p-head" hidden><pre id="headprev"></pre></div>
+      </section>
+
+      <section class="card" id="resp" aria-live="polite">
+        <h2>Resposta</h2>
+        <div id="respbody"><span class="empty">Clique em <b>Send</b> para mandar a requisição. A primeira já está pronta: o login do aluno01.</span></div>
+      </section>
+
+      <section class="card" id="codecard" hidden>
+        <h2>O código que respondeu</h2>
+        <div id="codebody"></div>
+      </section>
+
+      <section class="card">
+        <h2>Instrutor</h2>
+        <div class="inst">
+          <button class="btn" id="tglmode">Ligar modo seguro (correções)</button>
+          <button class="btn" id="reset">Restaurar dados</button>
+          <span class="meaning" id="instmsg">No modo seguro, a API usa as correções de BOLA e BOPLA.</span>
+        </div>
+      </section>
+      <p class="footer">
+        Usuários: <code>aluno01@qasec.lab</code> … <code>aluno60@qasec.lab</code> · senha <code>qasec123</code>.
+        Os dados ficam só no seu navegador e voltam ao padrão quando você recarrega a página.<br>
+        Use só para estudo: atacar sistemas reais sem autorização é crime (Lei 12.737/2012).
+        · Feito por <a href="https://github.com/BrenoLuna861" target="_blank" rel="noopener">Breno Luna</a>
+        · <a href="https://github.com/BrenoLuna861/qasec-lab" target="_blank" rel="noopener">código no GitHub</a>
+      </p>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+// ===================================================== SHA-256 / HMAC (puro JS, funciona offline)
+function sha256(bytes){
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const l=bytes.length, withPad=new Uint8Array(((l+9+63)>>6)<<6); withPad.set(bytes); withPad[l]=0x80;
+  const dv=new DataView(withPad.buffer); dv.setUint32(withPad.length-4,l*8); dv.setUint32(withPad.length-8,Math.floor(l/0x20000000));
+  const W=new Uint32Array(64), r=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let o=0;o<withPad.length;o+=64){
+    for(let t=0;t<16;t++)W[t]=dv.getUint32(o+t*4);
+    for(let t=16;t<64;t++){const s0=r(W[t-15],7)^r(W[t-15],18)^(W[t-15]>>>3),s1=r(W[t-2],17)^r(W[t-2],19)^(W[t-2]>>>10);W[t]=(W[t-16]+s0+W[t-7]+s1)|0;}
+    let [a,b,c,d,e,f,g,h]=H;
+    for(let t=0;t<64;t++){const S1=r(e,6)^r(e,11)^r(e,25),ch=(e&f)^(~e&g),t1=(h+S1+ch+K[t]+W[t])|0,S0=r(a,2)^r(a,13)^r(a,22),mj=(a&b)^(a&c)^(b&c),t2=(S0+mj)|0;h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0;}
+    H=[H[0]+a,H[1]+b,H[2]+c,H[3]+d,H[4]+e,H[5]+f,H[6]+g,H[7]+h].map(x=>x|0);
+  }
+  const out=new Uint8Array(32),odv=new DataView(out.buffer);H.forEach((x,i)=>odv.setUint32(i*4,x>>>0));return out;
+}
+const enc=s=>new TextEncoder().encode(s);
+function hmac(key,msg){let k=enc(key);if(k.length>64)k=sha256(k);const kp=new Uint8Array(64);kp.set(k);
+  const ip=kp.map(x=>x^0x36),op=kp.map(x=>x^0x5c),m=enc(msg);
+  const inner=new Uint8Array(64+m.length);inner.set(ip);inner.set(m,64);const ih=sha256(inner);
+  const outer=new Uint8Array(96);outer.set(op);outer.set(ih,64);return sha256(outer);}
+const b64u=bytes=>btoa(String.fromCharCode(...bytes)).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
+const b64uStr=s=>b64u(enc(s));
+const b64uDec=s=>{s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return new TextDecoder().decode(Uint8Array.from(atob(s),c=>c.charCodeAt(0)));};
+
+// ===================================================== API simulada (roda dentro da página)
+const SECRET=Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,'0')).join('');
+let MODE='vulneravel', db;
+function seed(){
+  const users=[
+    {id:1,nome:'Admin do Sistema',email:'admin@qasec.lab',senha:SECRET.slice(0,12),role:'admin',telefone:'(87) 90000-0001',cpf:'000.000.001-91',saldo:0,plano:'interno'},
+    {id:2,nome:'Mariana Souza',email:'mariana@qasec.lab',senha:SECRET.slice(2,14),role:'comum',telefone:'(87) 98111-2233',cpf:'123.456.789-09',saldo:15230.75,plano:'premium'},
+    {id:3,nome:'Carlos Pereira',email:'carlos@qasec.lab',senha:SECRET.slice(4,16),role:'comum',telefone:'(87) 98444-5566',cpf:'987.654.321-00',saldo:820.1,plano:'basico'},
+    {id:4,nome:'Diretoria Financeira',email:'financeiro@qasec.lab',senha:SECRET.slice(6,18),role:'gerente',telefone:'(87) 3861-0000',cpf:'111.222.333-96',saldo:982340,plano:'corporativo'},
+  ];
+  for(let i=1;i<=60;i++){const n=String(i).padStart(2,'0');users.push({id:100+i,nome:'Aluno '+n,email:'aluno'+n+'@qasec.lab',senha:'qasec123',role:'comum',telefone:'(87) 99000-'+String(1000+i).slice(-4),cpf:'não informado',saldo:50,plano:'basico'});}
+  const faturas=[];let fid=1001;const add=(o,d,v,ve,s,c)=>faturas.push({id:fid++,ownerId:o,descricao:d,valor:v,vencimento:ve,status:s,cartao_final:c});
+  add(2,'Plano Premium — outubro',189.9,'2026-10-10','paga','4412');add(3,'Plano Básico — outubro',49.9,'2026-10-10','atrasada','9031');
+  add(4,'Contrato corporativo — Q4',48500,'2026-11-30','aberta','7777');add(1,'Servidores cloud — novembro',12890,'2026-11-15','aberta','0001');
+  add(2,'Plano Premium — novembro',189.9,'2026-11-10','aberta','4412');
+  users.filter(u=>u.id>100).forEach(u=>{add(u.id,'Plano Básico — outubro',49.9,'2026-10-10','paga',String(1000+u.id).slice(-4));add(u.id,'Plano Básico — novembro',49.9,'2026-11-10','aberta',String(1000+u.id).slice(-4));});
+  db={users,faturas};
+}
+seed();
+const pub=u=>{const {senha,...r}=u;return r;};
+const isAdmin=u=>['admin','administrator','administrador'].includes(String(u.role).toLowerCase())||u.is_admin===true||(Array.isArray(u.permissions)&&u.permissions.includes('*'));
+const flag=n=>'FLAG{'+n+'_'+b64u(hmac(SECRET,n)).slice(0,8)+'}';
+function sign(p){const h=b64uStr(JSON.stringify({alg:'HS256',typ:'JWT'})),b=b64uStr(JSON.stringify({...p,iat:Math.floor(Date.now()/1000)}));return h+'.'+b+'.'+b64u(hmac(SECRET,h+'.'+b));}
+function verify(t){const p=String(t).split('.');if(p.length!==3)return null;if(b64u(hmac(SECRET,p[0]+'.'+p[1]))!==p[2])return null;try{return JSON.parse(b64uDec(p[1]));}catch(e){return null;}}
+
+const CODE={
+  faturaV:`// ❌ busca só pelo ID que veio na URL
+const fatura = await db.Faturas.findOne({
+  _id: req.params.id_fatura
+});`,
+  faturaS:`// ✅ correção do BOLA: ID da URL + dono vindo do token
+const fatura = await db.Faturas.findOne({
+  _id: req.params.id_fatura,
+  ownerId: req.user.id_jwt
+});
+if (!fatura) return res.status(403).json({ error: "Acesso Negado" });`,
+  userV:`// ❌ salva o req.body inteiro (mass assignment)
+await db.Users.update(req.user.id, req.body);`,
+  userS:`// ✅ correção do BOPLA: whitelist — só passa o que pode mudar
+const dadosSeguros = {
+  nome: req.body.nome,
+  telefone: req.body.telefone
+};
+await db.Users.update(req.user.id, dadosSeguros);`,
+  login:`// confere e-mail e senha e assina o token com o segredo do servidor
+const token = jwt.sign({ id: user.id, role: user.role }, SEGREDO);`,
+  auth:`// middleware: confere a assinatura do token antes de tudo
+const payload = jwt.verify(token, SEGREDO);   // adulterado? → 401
+req.user = { id_jwt: payload.id };`,
+};
+
+function api(method,url,headers,raw){
+  let path; try{path=new URL(url,'http://lab').pathname.replace(/\/+$/,'')||'/';}catch(e){return [400,{erro:'URL inválida.'}];}
+  const parse=()=>{if(!raw||!raw.trim())return {};return JSON.parse(raw);};
+  if(path==='/'||path==='/api') return [200,{api:'QASec Lab — E-info 2026',modo:MODE,rotas:['POST /api/login','GET /api/me','GET /api/users/:id','GET /api/faturas','GET /api/faturas/:id','PATCH /api/users/me','PUT /api/users/me']}];
+  if(path==='/api/login'&&method==='POST'){
+    let b;try{b=parse();}catch(e){return [400,{erro:'JSON inválido. Confira aspas duplas, vírgulas e se não há comentários //.'}];}
+    if(!b||typeof b!=='object'||!b.email||!b.senha) return [400,{erro:'Envie email e senha no Body.'}];
+    const u=db.users.find(x=>x.email.toLowerCase()===String(b.email).trim().toLowerCase()&&x.senha===b.senha);
+    if(!u) return [401,{erro:'E-mail ou senha incorretos.'}];
+    return [200,{token:sign({id:u.id,email:u.email,role:u.role}),usuario:{id:u.id,nome:u.nome,role:u.role}},'login'];
+  }
+  if(path==='/api/login') return [405,{erro:'Use o método POST no login.'}];
+  if(!path.startsWith('/api/')) return [404,{erro:'Rota não encontrada. As rotas começam com /api.'}];
+  const h=headers.Authorization||''; const m=h.match(/^Bearer\s+(.+)$/i);
+  if(!m) return [401,{erro:'Token ausente. Preencha a aba Authorization.'},'auth'];
+  const pl=verify(m[1].trim().replace(/^"|"$/g,''));
+  if(!pl) return [401,{erro:'Token inválido: a assinatura não confere.'},'auth'];
+  const me=db.users.find(u=>u.id===pl.id); if(!me) return [401,{erro:'Usuário não existe mais. Faça login de novo.'}];
+
+  if(path==='/api/me'&&method==='GET') return [200,pub(me)];
+  if(path==='/api/users/me'&&(method==='PATCH'||method==='PUT')){
+    let b;try{b=parse();}catch(e){return [400,{erro:'JSON inválido. Confira aspas duplas, vírgulas e se não há comentários //.'}];}
+    if(typeof b!=='object'||Array.isArray(b)||b===null) return [400,{erro:'O Body deve ser um objeto JSON.'}];
+    if(MODE==='vulneravel'){const {id,...resto}=b;Object.assign(me,resto);const out={mensagem:'Perfil atualizado.',usuario:pub(me)};if(isAdmin(me))out.flag_bopla=flag('BOPLA');return [200,out,'userV'];}
+    const bad=Object.keys(b).filter(k=>!['nome','email','telefone'].includes(k));
+    if(bad.length) return [400,{erro:'Campos não permitidos.',campos:bad,permitidos:['nome','email','telefone']},'userS'];
+    if('email' in b&&db.users.some(u=>u.id!==me.id&&u.email.toLowerCase()===String(b.email).toLowerCase())) return [409,{erro:'Esse e-mail já está em uso.'},'userS'];
+    ['nome','email','telefone'].forEach(k=>{if(k in b)me[k]=String(b[k]).slice(0,120);});
+    return [200,{mensagem:'Perfil atualizado.',usuario:pub(me)},'userS'];
+  }
+  let mm=path.match(/^\/api\/users\/(\d+)$/);
+  if(mm&&method==='GET'){const alvo=db.users.find(u=>u.id===+mm[1]);
+    if(MODE==='seguro'&&(!alvo||(alvo.id!==me.id&&!isAdmin(me)))) return [403,{erro:'Acesso negado.'}];
+    if(!alvo) return [404,{erro:'Usuário não encontrado.'}];
+    const out=pub(alvo); if(alvo.id!==me.id) out.flag_bola=flag('BOLA'); return [200,out];}
+  if(path==='/api/faturas'&&method==='GET') return [200,db.faturas.filter(f=>f.ownerId===me.id)];
+  mm=path.match(/^\/api\/faturas\/(\d+)$/);
+  if(mm&&method==='GET'){const id=+mm[1];
+    const f=MODE==='vulneravel'?db.faturas.find(x=>x.id===id):db.faturas.find(x=>x.id===id&&(x.ownerId===me.id||isAdmin(me)));
+    const ck=MODE==='vulneravel'?'faturaV':'faturaS';
+    if(!f) return MODE==='seguro'?[403,{erro:'Acesso Negado'},ck]:[404,{erro:'Fatura não encontrada.'},ck];
+    const dono=db.users.find(u=>u.id===f.ownerId); const out={...f,titular:dono?dono.nome:null};
+    if(f.ownerId!==me.id) out.flag_bola=flag('BOLA'); return [200,out,ck];}
+  if(path==='/api/admin/users'&&method==='GET'){ if(!isAdmin(me)) return [403,{erro:'Apenas administradores.'}]; return [200,{flag_admin:flag('ADMIN'),usuarios:db.users.slice(0,8).map(pub),total:db.users.length}];}
+  if(path==='/api/debug'&&method==='GET'){ if(MODE==='seguro') return [404,{erro:'Rota não encontrada.'}]; return [200,{versao:'1.4.2-dev',dica:'Existe um painel em /api/admin/... só para administradores.'}];}
+  return [404,{erro:'Rota não encontrada.'}];
+}
+
+// ===================================================== interface
+const $=id=>document.getElementById(id);
+const MEAN={200:'OK',201:'Created',400:'Bad Request — o backend barrou a sintaxe',401:'Unauthorized — sem crachá ou crachá falso',403:'Forbidden — sei quem você é, mas não pode',404:'Not Found',405:'Method Not Allowed',409:'Conflict — dado já existe',500:'Internal Server Error'};
+const COLL=[
+  ['Preparação',[['POST','/api/login','{\n  "email": "aluno01@qasec.lab",\n  "senha": "qasec123"\n}','Login'],['GET','/api/me',null,'Meu perfil']]],
+  ['Desafio 01 · BOLA',[['GET','/api/faturas',null,'Minhas faturas'],['GET','/api/faturas/1001',null,'Uma fatura por ID'],['GET','/api/users/2',null,'Perfil por ID']]],
+  ['Desafio 02 · BOPLA',[['PATCH','/api/users/me','{\n  "nome": "Meu nome"\n}','Atualizar perfil']]],
+];
+const coll=$('coll');
+COLL.forEach(([g,items])=>{const d=document.createElement('div');d.className='grp';d.textContent=g;coll.appendChild(d);
+  items.forEach(([m,u,b,n])=>{const bt=document.createElement('button');bt.innerHTML='<span class="m '+m+'">'+m+'</span>'+n;
+    bt.onclick=()=>{$('method').value=m;$('url').value=u;if(b!==null){$('body').value=b;showTab('body');}else showTab('auth');updHead();};coll.appendChild(bt);});});
+
+function showTab(t){['auth','body','head'].forEach(x=>{$('p-'+x).hidden=x!==t;$('rt-'+x).setAttribute('aria-selected',String(x===t));});}
+$('rt-auth').onclick=()=>showTab('auth');$('rt-body').onclick=()=>showTab('body');$('rt-head').onclick=()=>{updHead();showTab('head');};
+function headers(){const h={};const t=$('token').value.trim();if(t)h.Authorization='Bearer '+t;if(['POST','PUT','PATCH'].includes($('method').value))h['Content-Type']='application/json';return h;}
+function updHead(){const h=headers();$('headprev').textContent=Object.keys(h).length?Object.entries(h).map(([k,v])=>k+': '+(k==='Authorization'?v.slice(0,40)+'…':v)).join('\n'):'(nenhum header)';$('authdot').hidden=!$('token').value.trim();}
+$('token').addEventListener('input',updHead);$('method').addEventListener('change',updHead);
+
+$('tm1').onclick=()=>{$('mis1').hidden=false;$('mis2').hidden=true;$('tm1').setAttribute('aria-pressed','true');$('tm2').setAttribute('aria-pressed','false');};
+$('tm2').onclick=()=>{$('mis1').hidden=true;$('mis2').hidden=false;$('tm2').setAttribute('aria-pressed','true');$('tm1').setAttribute('aria-pressed','false');};
+
+function pretty(o){const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return esc(JSON.stringify(o,null,2)).replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(-?\d+(?:\.\d+)?)\b|\b(true|false|null)\b/g,(m,s,colon,n,kw)=>{
+    if(s){if(colon)return '<span class="k">'+s+'</span>'+colon; return /FLAG\{/.test(s)?'<span class="flaghit">'+s+'</span>':'<span class="str">'+s+'</span>';}
+    if(n)return '<span class="num">'+n+'</span>'; return '<span class="kw">'+kw+'</span>';});}
+
+const found=new Set();
+let toastTimer;
+function toast(t){const el=$('toast');el.textContent=t;el.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('on'),2600);}
+const hist=[];
+let busy=false;
+function send(){
+  if(busy)return; busy=true;
+  const method=$('method').value,url=$('url').value.trim(),raw=['POST','PUT','PATCH'].includes(method)?$('body').value:'';
+  const t0=performance.now();
+  $('respbody').innerHTML='<span class="empty">Enviando…</span>';
+  setTimeout(()=>{
+    busy=false;
+    let r;try{r=api(method,url,headers(),raw);}catch(e){r=[500,{erro:'Erro interno.'}];}
+    const [st,body,ck]=r, ms=Math.round(performance.now()-t0);
+    const cls=st<300?'s2':st<500?'s4':'s5';
+    let html='<div class="resp-head"><span class="status '+cls+'">'+st+'</span><span class="meaning">'+(MEAN[st]||'')+' · '+ms+' ms</span>';
+    if(body&&body.token) html+='<button class="btn" id="usetok" style="margin-left:auto">Usar este token</button>';
+    html+='</div><pre>'+pretty(body)+'</pre>';
+    $('respbody').innerHTML=html;
+    if(body&&body.token) $('usetok').onclick=()=>{$('token').value=body.token;updHead();showTab('auth');toast('Token colocado na aba Authorization');};
+    const s=JSON.stringify(body);['BOLA','BOPLA','ADMIN'].forEach(n=>{if(s.includes('FLAG{'+n+'_')&&!found.has(n)){found.add(n);$('f-'+n).classList.add('got');toast('Você achou a flag '+n+'!');}});
+    if(ck&&CODE[ck]){$('codecard').hidden=false;$('codebody').innerHTML='<div class="codebox"><span class="lbl">Modo '+(MODE==='seguro'?'seguro':'vulnerável')+'</span><pre>'+CODE[ck].replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre></div>';}
+    else $('codecard').hidden=true;
+    hist.unshift([method,url,st,raw]);if(hist.length>15)hist.pop();
+    $('hist').innerHTML='';hist.forEach(([m,u,s2,b])=>{const bt=document.createElement('button');bt.innerHTML='<span class="m '+m+'">'+m+'</span>'+u.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'<span class="st">'+s2+'</span>';
+      bt.onclick=()=>{$('method').value=m;$('url').value=u;if(b)$('body').value=b;updHead();};$('hist').appendChild(bt);});
+  },120+Math.random()*120);
+}
+$('send').onclick=send;
+$('url').addEventListener('keydown',e=>{if(e.key==='Enter')send();});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')send();});
+
+$('tglmode').onclick=()=>{MODE=MODE==='vulneravel'?'seguro':'vulneravel';const p=$('modepill');p.textContent=MODE==='seguro'?'SEGURO':'VULNERÁVEL';p.className='pill '+(MODE==='seguro'?'seg':'vul');
+  $('tglmode').textContent=MODE==='seguro'?'Voltar ao modo vulnerável':'Ligar modo seguro (correções)';
+  $('instmsg').textContent=MODE==='seguro'?'Correções ligadas. Repita os ataques: agora devem dar 403 e 400.':'No modo seguro, a API usa as correções de BOLA e BOPLA.';toast(MODE==='seguro'?'Modo seguro ligado':'Modo vulnerável');};
+let resetArmed=false;
+$('reset').onclick=()=>{if(!resetArmed){resetArmed=true;$('reset').textContent='Confirmar: apagar alterações?';setTimeout(()=>{resetArmed=false;$('reset').textContent='Restaurar dados';},4000);return;}
+  seed();resetArmed=false;$('reset').textContent='Restaurar dados';$('token').value='';found.clear();['BOLA','BOPLA','ADMIN'].forEach(n=>$('f-'+n).classList.remove('got'));updHead();toast('Dados restaurados. Faça login de novo.');};
+updHead();
+})();
+</script>
+</body>
+</html>
